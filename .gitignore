@@ -1,0 +1,18 @@
+# Folder dependensi
+node_modules/
+
+# Database
+*.sqlite
+*.sqlite-journal
+
+# File yang dihasilkan secara otomatis
+reports/*.pdf
+uploads/
+logs/
+
+# Konfigurasi sistem/IDE
+.DS_Store
+.vscode/
+.idea/
+.gemini/
+.env

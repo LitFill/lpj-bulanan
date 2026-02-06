@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Statistik - LPJ</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="max-w-6xl mx-auto py-10 px-4">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Dashboard LPJ</h1>
+            <div class="flex gap-4">
+                <a href="/reports" class="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition">Lihat Arsip</a>
+                <a href="/export-csv" class="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    Export CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-gray-500 uppercase">Total Laporan</p>
+                <p class="text-2xl font-bold text-gray-800"><%= stats.total_reports %></p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-blue-500 uppercase">Total Pemasukan</p>
+                <p class="text-2xl font-bold text-blue-600">Rp <%= (stats.total_pemasukan || 0).toLocaleString('id-ID') %></p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-red-500 uppercase">Total Pengeluaran</p>
+                <p class="text-2xl font-bold text-red-600">Rp <%= (stats.total_pengeluaran || 0).toLocaleString('id-ID') %></p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <p class="text-sm font-medium text-green-500 uppercase">Total Saldo</p>
+                <p class="text-2xl font-bold text-green-600">Rp <%= (stats.total_saldo || 0).toLocaleString('id-ID') %></p>
+            </div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 mb-10">
+            <h2 class="text-xl font-bold text-gray-800 mb-6">Tren Keuangan (6 Bulan Terakhir)</h2>
+            <div class="h-80">
+                <canvas id="financeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('financeChart').getContext('2d');
+        const monthlyData = <%- JSON.stringify(monthlyData) %>;
+
+        // Reverse data for chronological order
+        const data = [...monthlyData].reverse();
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.bulan),
+                datasets: [
+                    {
+                        label: 'Pemasukan',
+                        data: data.map(d => d.masuk),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6
+                    },
+                    {
+                        label: 'Pengeluaran',
+                        data: data.map(d => d.keluar),
+                        backgroundColor: '#ef4444',
+                        borderRadius: 6
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return 'Rp ' + value.toLocaleString('id-ID');
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

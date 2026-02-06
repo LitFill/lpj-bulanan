@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form LPJ Bulanan</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-12 px-2 md:px-0">
+    <div class="max-w-3xl mx-auto mt-4 md:mt-10 bg-white p-4 md:p-8 rounded-xl shadow-lg border border-gray-100">
+        <div class="text-center mb-6 md:mb-10">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">LPJ Bulanan Pengurus Andalusia</h1>
+            <p class="text-sm md:text-base text-gray-500 mt-2">Sistem Digitalisasi Laporan Pertanggungjawaban</p>
+            <div class="mt-4 flex flex-wrap justify-center gap-2 md:gap-4 text-xs md:text-sm">
+                <a href="/reports" class="text-blue-600 hover:text-blue-800 font-semibold underline decoration-2 underline-offset-4 transition">
+                    Lihat Arsip Laporan &rarr;
+                </a>
+                <% if (typeof user !== 'undefined' && user) { %>
+                    <span class="text-gray-300 hidden md:inline">|</span>
+                    <a href="/dashboard" class="text-indigo-600 hover:text-indigo-800 font-semibold transition">Statistik</a>
+                    <span class="text-gray-300 hidden md:inline">|</span>
+                    <span class="text-gray-600 font-medium italic">Halo, <%= user.full_name %></span>
+                    <a href="/logout" class="text-red-500 hover:text-red-700 font-semibold">Logout</a>
+                <% } else { %>
+                    <span class="text-gray-300 hidden md:inline">|</span>
+                    <a href="/login" class="text-gray-600 hover:text-blue-600 font-semibold transition">Login Admin</a>
+                <% } %>
+            </div>
+        </div>
+
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div class="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6 text-sm rounded-r-lg" role="alert">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                    </svg>
+                    <span class="font-bold">Gagal Mengirim Laporan:</span>
+                </div>
+                <p class="mt-1 ml-7"><%= error %></p>
+            </div>
+        <% } %>
+
+        <form action="/submit" method="POST" enctype="multipart/form-data" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Pelapor</label>
+                    <input type="text" name="nama" required placeholder="Nama lengkap" value="<%= typeof oldData !== 'undefined' ? oldData.nama : '' %>" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Divisi/Departemen</label>
+                    <select name="divisi" id="divisi-select" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                        <option value="" disabled <%= typeof oldData === 'undefined' ? 'selected' : '' %>>-- Pilih Divisi --</option>
+                        <% const divisis = ["Sekretaris", "Bendahara", "Kema'arifan Pusat", "Kema'arifan Bidang Bahasa", "Kema'arifan Bidang Tahfidz", "Mudzakaroh", "Keamanan", "Kebersihan", "Kesehatan", "Media", "Sarpras", "Penerangan", "Sound", "Pengairan", "Humas", "EO", "Ko'or Asrama", "Pembimbing Kamar", "Pendidikan (Madin)"]; %>
+                        <% divisis.forEach(div => { %>
+                            <option <%= typeof oldData !== 'undefined' && oldData.divisi === div ? 'selected' : '' %>><%= div %></option>
+                        <% }); %>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Selection for Koordinator Asrama -->
+            <div id="asrama-selection" class="<%= typeof oldData !== 'undefined' && oldData.divisi === "Ko'or Asrama" ? '' : 'hidden' %>">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Nama Asrama</label>
+                <select name="nama_asrama" id="asrama-select" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                    <option value="" disabled <%= typeof oldData === 'undefined' || !oldData.nama_asrama ? 'selected' : '' %>>-- Pilih Nama Asrama --</option>
+                    <% const asramas = ["Koordinator Asrama Deza", "Koordinator Asrama Nahwu", "Koordinator Asrama Hadits", "Koordinator Asrama Fiqih", "Koordinator Asrama Selatan", "Koordinator Asrama Pdf"]; %>
+                    <% asramas.forEach(asrama => { %>
+                        <option <%= typeof oldData !== 'undefined' && oldData.nama_asrama === asrama ? 'selected' : '' %>><%= asrama %></option>
+                    <% }); %>
+                </select>
+            </div>
+
+            <!-- Warning for Pembimbing Kamar -->
+            <div id="dev-warning" class="<%= typeof oldData !== 'undefined' && oldData.divisi === 'Pembimbing Kamar' ? '' : 'hidden' %> bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700 font-medium">
+                            Maaf, bagian <span class="font-bold">Pembimbing Kamar</span> masih dalam tahap pembangunan dan belum bisa diisi.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Bulan Laporan</label>
+                    <input type="month" name="bulan" id="bulan-input" required value="<%= typeof oldData !== 'undefined' ? oldData.bulan : '' %>" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Lampiran Tambahan (Opsional)</label>
+                    <input type="file" name="attachment" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </div>
+
+            <hr class="border-gray-100">
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Realisasi Program Kerja</label>
+                <textarea name="program_kerja" rows="4" required placeholder="Detail kegiatan yang telah dilaksanakan..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"><%= typeof oldData !== 'undefined' ? oldData.program_kerja : '' %></textarea>
+            </div>
+
+            <!-- Rincian Pemasukan -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <label class="block text-sm font-semibold text-blue-800">Rincian Pemasukan</label>
+                    <button type="button" onclick="addRow('pemasukan-list')" class="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-200 transition">+ Tambah Baris</button>
+                </div>
+                <div id="pemasukan-list" class="space-y-3 md:space-y-2">
+                    <% if (typeof oldData !== 'undefined' && oldData.pemasukan_ket) { %>
+                        <% oldData.pemasukan_ket.forEach((ket, i) => { %>
+                            <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                                <input type="text" name="pemasukan_ket[]" value="<%= ket %>" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                                <div class="col-span-4 flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                    <input type="number" name="pemasukan_val[]" value="<%= oldData.pemasukan_val[i] %>" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                                </div>
+                                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                            <input type="text" name="pemasukan_ket[]" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                            <div class="col-span-4 flex items-center gap-2">
+                                <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                <input type="number" name="pemasukan_val[]" value="0" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Rincian Pengeluaran -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <label class="block text-sm font-semibold text-red-800">Rincian Pengeluaran</label>
+                    <button type="button" onclick="addRow('pengeluaran-list')" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full hover:bg-red-200 transition">+ Tambah Baris</button>
+                </div>
+                <div id="pengeluaran-list" class="space-y-3 md:space-y-2">
+                    <% if (typeof oldData !== 'undefined' && oldData.pengeluaran_ket) { %>
+                        <% oldData.pengeluaran_ket.forEach((ket, i) => { %>
+                            <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                                <input type="text" name="pengeluaran_ket[]" value="<%= ket %>" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                                <div class="col-span-4 flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                    <input type="number" name="pengeluaran_val[]" value="<%= oldData.pengeluaran_val[i] %>" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                                </div>
+                                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                            <input type="text" name="pengeluaran_ket[]" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                            <div class="col-span-4 flex items-center gap-2">
+                                <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                <input type="number" name="pengeluaran_val[]" value="0" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Total Pemasukan</label>
+                    <input type="number" id="total-pemasukan" name="pemasukan" value="<%= typeof oldData !== 'undefined' ? oldData.pemasukan : '0' %>" readonly class="w-full bg-transparent font-bold text-blue-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Total Pengeluaran</label>
+                    <input type="number" id="total-pengeluaran" name="pengeluaran" value="<%= typeof oldData !== 'undefined' ? oldData.pengeluaran : '0' %>" readonly class="w-full bg-transparent font-bold text-red-600 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Saldo Akhir</label>
+                    <input type="number" id="total-saldo" value="<%= typeof oldData !== 'undefined' ? (Number(oldData.pemasukan) - Number(oldData.pengeluaran)) : '0' %>" readonly class="w-full bg-transparent font-bold text-green-600 outline-none">
+                </div>
+            </div>
+
+            <!-- Negative Balance Warning -->
+            <div id="saldo-warning" class="<%= typeof oldData !== 'undefined' && (Number(oldData.pengeluaran) > Number(oldData.pemasukan)) ? '' : 'hidden' %> bg-red-50 border-l-4 border-red-500 p-3">
+                <p class="text-xs text-red-700 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    Peringatan: Total pengeluaran lebih besar dari pemasukan. Pastikan angka sudah benar.
+                </p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Evaluasi & Kendala</label>
+                <textarea name="evaluasi" rows="3" required placeholder="Apa hambatan bulan ini?" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"><%= typeof oldData !== 'undefined' ? oldData.evaluasi : '' %></textarea>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Rencana Bulan Depan</label>
+                <textarea name="rencana" rows="3" required placeholder="Target atau agenda bulan depan..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"><%= typeof oldData !== 'undefined' ? oldData.rencana : '' %></textarea>
+            </div>
+
+            <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:shadow-xl transition transform active:scale-[0.98] text-lg flex justify-center items-center gap-2">
+                <span id="btn-text">Kirim Laporan & Buat PDF</span>
+                <svg id="btn-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Form Loading State
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const btn = document.getElementById('submit-btn');
+            const text = document.getElementById('btn-text');
+            const spinner = document.getElementById('btn-spinner');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-70', 'cursor-not-allowed');
+            text.innerText = 'Sedang Memproses...';
+            spinner.classList.remove('hidden');
+        });
+
+        function addRow(containerId) {
+            const container = document.getElementById(containerId);
+            const isPemasukan = containerId === 'pemasukan-list';
+            const focusColor = isPemasukan ? 'blue' : 'red';
+            const div = document.createElement('div');
+            div.className = 'flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative';
+            div.innerHTML = `
+                <input type="text" name="${isPemasukan ? 'pemasukan_ket[]' : 'pengeluaran_ket[]'}" placeholder="Keterangan" oninput="handleAutoRow(this, '${containerId}')" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-${focusColor}-500">
+                <div class="col-span-4 flex items-center gap-2">
+                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                    <input type="number" name="${isPemasukan ? 'pemasukan_val[]' : 'pengeluaran_val[]'}" value="0" oninput="handleAutoRow(this, '${containerId}'); calculateTotals()" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-${focusColor}-500">
+                </div>
+                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function handleAutoRow(input, containerId) {
+            const container = document.getElementById(containerId);
+            const rows = container.querySelectorAll('.item-row');
+            const lastRow = rows[rows.length - 1];
+
+            if (input.parentElement.parentElement === lastRow && input.value.trim() !== "" && input.value !== "0") {
+                addRow(containerId);
+            }
+        }
+
+        function calculateTotals() {
+            let totalMasuk = 0;
+            let totalKeluar = 0;
+
+            document.querySelectorAll('input[name="pemasukan_val[]"]').forEach(input => {
+                totalMasuk += Number(input.value || 0);
+            });
+
+            document.querySelectorAll('input[name="pengeluaran_val[]"]').forEach(input => {
+                totalKeluar += Number(input.value || 0);
+            });
+
+            document.getElementById('total-pemasukan').value = totalMasuk;
+            document.getElementById('total-pengeluaran').value = totalKeluar;
+            document.getElementById('total-saldo').value = totalMasuk - totalKeluar;
+        }
+
+        // Initialize auto-row for first inputs
+        document.querySelectorAll('.item-row input').forEach(input => {
+            const containerId = input.closest('[id$="-list"]').id;
+            input.addEventListener('input', function() {
+                handleAutoRow(this, containerId);
+                if (this.type === 'number') calculateTotals();
+            });
+        });
+
+        // Divisi restriction logic
+        const divisiSelect = document.getElementById('divisi-select');
+        const asramaSelection = document.getElementById('asrama-selection');
+        const asramaSelect = document.getElementById('asrama-select');
+        const devWarning = document.getElementById('dev-warning');
+        const submitBtn = document.getElementById('submit-btn');
+
+        function updateDivisiStatus() {
+            if (divisiSelect.value === 'Pembimbing Kamar') {
+                devWarning.classList.remove('hidden');
+                asramaSelection.classList.add('hidden');
+                submitBtn.disabled = true;
+                submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                asramaSelect.required = false;
+            } else if (divisiSelect.value === "Ko'or Asrama") {
+                devWarning.classList.add('hidden');
+                asramaSelection.classList.remove('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                asramaSelect.required = true;
+            } else {
+                devWarning.classList.add('hidden');
+                asramaSelection.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                asramaSelect.required = false;
+            }
+        }
+
+        divisiSelect.addEventListener('change', updateDivisiStatus);
+        
+        // Initial check on load
+        updateDivisiStatus();
+        calculateTotals();
+    </script>
+</body>
+</html>
