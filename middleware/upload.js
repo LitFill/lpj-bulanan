@@ -1,14 +1,14 @@
-const multer = require("multer");
-const path = require("path");
-const { logger } = require("../logger");
+import multer, { diskStorage, MulterError } from "multer";
+import { join } from "path";
+const { logger } = require("../logger").default.default;
 
 /**
  * Validasi tipe file yang diunggah.
- * @param {import('express').Request} req
+ * @param {import('express').Request} _req
  * @param {import('multer').File} file
  * @param {function(Error|null, boolean): void} cb
  */
-const fileFilter = (req, file, cb) => {
+const fileFilter = (_req, file, cb) => {
   /** @type {Object.<string, string>} */
   const allowedTypes = {
     "application/pdf": "PDF",
@@ -49,12 +49,12 @@ const fileFilter = (req, file, cb) => {
  * Konfigurasi penyimpanan file.
  * @type {import('multer').StorageEngine}
  */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, "..", "uploads");
+const storage = diskStorage({
+  destination: (_req, _file, cb) => {
+    const uploadPath = join(__dirname, "..", "uploads");
     cb(null, uploadPath);
   },
-  filename: (req, file, cb) => {
+  filename: (_req, file, cb) => {
     // Sanitize filename
     const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -78,12 +78,12 @@ const upload = multer({
 /**
  * Middleware untuk menangani error saat proses unggah file.
  * @param {Error} err
- * @param {import('express').Request} req
+ * @param {import('express').Request} _req
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
-const handleUploadError = (err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
+const handleUploadError = (err, _req, res, next) => {
+  if (err instanceof MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
@@ -105,7 +105,7 @@ const handleUploadError = (err, req, res, next) => {
   next();
 };
 
-module.exports = {
+export default {
   upload,
   handleUploadError,
 };
