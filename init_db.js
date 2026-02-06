@@ -1,4 +1,4 @@
-import { serialize, prepare } from "./database";
+import { serialize, prepare } from "./database.js";
 
 serialize(() => {
   // Insert default user

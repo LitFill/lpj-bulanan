@@ -1,5 +1,11 @@
-const sqlite3 = require("sqlite3").verbose();
-import { join } from "path";
+import sqlite3 from "sqlite3";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const sqlite3Verbose = sqlite3.verbose();
 
 /**
  * Path ke file database SQLite
@@ -11,7 +17,7 @@ const dbPath = join(__dirname, "database.sqlite");
  * Instansi database SQLite untuk aplikasi LPJ
  * @type {import('sqlite3').Database}
  */
-const db = new sqlite3.Database(dbPath, (err) => {
+const db = new sqlite3Verbose.Database(dbPath, (err) => {
   if (err) console.error("Error opening database:", err.message);
   else console.log("Connected to SQLite database.");
 });
@@ -72,6 +78,12 @@ db.serialize(() => {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 });
+
+export const get = db.get.bind(db);
+export const all = db.all.bind(db);
+export const run = db.run.bind(db);
+export const serialize = db.serialize.bind(db);
+export const prepare = db.prepare.bind(db);
 
 export default db;
 

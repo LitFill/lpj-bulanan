@@ -1,13 +1,20 @@
-import express, { static as _static } from "express";
-import { urlencoded } from "body-parser";
+import express from "express";
+const { static: _static } = express;
+import bodyParser from "body-parser";
+const { urlencoded } = bodyParser;
 import session from "express-session";
 import PDFDocument from "pdfkit";
 import { existsSync, mkdirSync, createWriteStream, unlinkSync } from "fs";
-import { join } from "path";
-import { Parser } from "json2csv";
-import { upload, handleUploadError } from "./middleware/upload";
-import { logger, dbLogger, auditLogger } from "./logger";
-import { get, all, run } from "./database";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import json2csv from "json2csv";
+const { Parser } = json2csv;
+import { upload, handleUploadError } from "./middleware/upload.js";
+import { logger, dbLogger, auditLogger } from "./logger.js";
+import { get, all, run } from "./database.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3000;

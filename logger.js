@@ -1,14 +1,17 @@
-import {
-  format as _format,
-  createLogger,
-  transports as _transports,
-} from "winston";
-import { join } from "path";
+import winston from "winston";
+const { format: _format, createLogger, transports: _transports } = winston;
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { existsSync, mkdirSync } from "fs";
+import db from "./database.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Create logs directory if it doesn't exist
 const logsDir = join(__dirname, "logs");
-if (!require("fs").existsSync(logsDir))
-  require("fs").mkdirSync(logsDir, { recursive: true });
+if (!existsSync(logsDir))
+  mkdirSync(logsDir, { recursive: true });
 
 // Custom format for logs
 const logFormat = _format.combine(
@@ -24,7 +27,7 @@ const logFormat = _format.combine(
  * Logger utama aplikasi menggunakan Winston.
  * @type {import('winston').Logger}
  */
-const logger = createLogger({
+export const logger = createLogger({
   level: "info",
   format: logFormat,
   defaultMeta: { service: "lpj-system" },
@@ -64,7 +67,7 @@ if (process.env.NODE_ENV !== "production")
  * Objek helper untuk pencatatan log ke database.
  * @namespace
  */
-const dbLogger = {
+export const dbLogger = {
   /**
    * Mencatat pesan log ke tabel system_logs di database.
    * @param {string} level - Level keparahan log (info, error, warn).
@@ -72,7 +75,6 @@ const dbLogger = {
    * @param {Object} [meta={}] - Data tambahan dalam format objek.
    */
   log: (level, message, meta = {}) => {
-    const db = require("./database").default.default;
     const logData = {
       level,
       message,
@@ -94,7 +96,7 @@ const dbLogger = {
  * Objek helper untuk pencatatan jejak audit (audit trail).
  * @namespace
  */
-const auditLogger = {
+export const auditLogger = {
   /**
    * Mencatat aktivitas audit ke tabel audit_logs.
    * @param {number|string} userId - ID pengguna yang melakukan aktivitas.
@@ -104,7 +106,6 @@ const auditLogger = {
    * @param {Object} [details={}] - Detail tambahan mengenai aktivitas.
    */
   log: (userId, action, resourceType, resourceId, details = {}) => {
-    const db = require("./database").default.default;
     const auditData = {
       user_id: userId,
       action,

@@ -1,6 +1,11 @@
-import multer, { diskStorage, MulterError } from "multer";
-import { join } from "path";
-const { logger } = require("../logger").default.default;
+import multer from "multer";
+const { diskStorage, MulterError } = multer;
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { logger } from "../logger.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Validasi tipe file yang diunggah.
@@ -66,7 +71,7 @@ const storage = diskStorage({
  * Instance Multer untuk mengelola unggahan file.
  * @type {import('multer').Multer}
  */
-const upload = multer({
+export const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
@@ -82,7 +87,7 @@ const upload = multer({
  * @param {import('express').Response} res
  * @param {import('express').NextFunction} next
  */
-const handleUploadError = (err, _req, res, next) => {
+export const handleUploadError = (err, _req, res, next) => {
   if (err instanceof MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
