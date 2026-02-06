@@ -72,7 +72,7 @@ const dbLogger = {
    * @param {Object} [meta={}] - Data tambahan dalam format objek.
    */
   log: (level, message, meta = {}) => {
-    const db = require("./database");
+    const db = require("./database").default.default;
     const logData = {
       level,
       message,
@@ -104,7 +104,7 @@ const auditLogger = {
    * @param {Object} [details={}] - Detail tambahan mengenai aktivitas.
    */
   log: (userId, action, resourceType, resourceId, details = {}) => {
-    const db = require("./database");
+    const db = require("./database").default.default;
     const auditData = {
       user_id: userId,
       action,
