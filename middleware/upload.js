@@ -89,24 +89,23 @@ export const upload = multer({
  */
 export const handleUploadError = (err, _req, res, next) => {
   if (err instanceof MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
+    if (err.code === "LIMIT_FILE_SIZE")
       return res.status(400).json({
         success: false,
         message: "Ukuran file terlalu besar. Maksimal 10MB.",
       });
-    }
-    if (err.code === "LIMIT_FILE_COUNT") {
+
+    if (err.code === "LIMIT_FILE_COUNT")
       return res.status(400).json({
         success: false,
         message: "Terlalu banyak file. Maksimal 1 file yang diizinkan.",
       });
-    }
-  } else if (err) {
+  } else if (err)
     return res.status(400).json({
       success: false,
       message: err.message,
     });
-  }
+
   next();
 };
 
@@ -114,4 +113,3 @@ export default {
   upload,
   handleUploadError,
 };
-
