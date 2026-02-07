@@ -7,6 +7,8 @@ node_modules/
 
 # File yang dihasilkan secara otomatis
 reports/*.pdf
+reports/*.typ
+!reports/template.typ
 uploads/
 logs/
 

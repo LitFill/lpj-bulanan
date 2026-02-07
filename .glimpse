@@ -6,7 +6,8 @@ exclude = [
     "**/node_modules/**",
     "**/dist/**",
     "**/build/**",
-    "**/*lock*"
+    "**/*lock*",
+    "**/*.pdf",
 ]
 max_size = 10485760
 max_depth = 20

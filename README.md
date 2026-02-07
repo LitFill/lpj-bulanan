@@ -21,7 +21,7 @@ PDF siap cetak.
 
 - **Backend**: Node.js, Express.js
 - **Database**: SQLite (Ringan & Tanpa Server)
-- **PDF Engine**: PDFKit
+- **PDF Engine**: Typst (Modern, fast, and high-quality typesetting)
 - **Styling**: Tailwind CSS
 - **Template Engine**: EJS
 
@@ -33,19 +33,41 @@ PDF siap cetak.
    npm install
    ```
 
-2. Inisialisasi database (pertama kali):
+2. Konfigurasi Environment:
+   Buat file `.env` di root direktori:
+
+   ```env bash
+   PORT=3000
+   SESSION_SECRET=your_secret_key_here
+   ```
+
+3. Inisialisasi database (pertama kali):
 
    ```bash
    node init_db.js
    ```
 
-3. Jalankan server:
+4. Jalankan server:
 
    ```bash
    node server.js
    ```
 
-4. Buka di browser: `http://localhost:3000`
+5. Buka di browser: `http://localhost:3000`
+
+## Struktur Data Keuangan (JSON)
+
+Rincian keuangan disimpan dalam kolom `financial_details` dengan format:
+
+```json
+{
+  "pemasukan": [
+    { "ket": "Iuran Anggota", "val": 50000 },
+    { "ket": "Sisa Kas", "val": 10000 }
+  ],
+  "pengeluaran": [{ "ket": "Beli Kertas", "val": 35000 }]
+}
+```
 
 ## Struktur Folder
 

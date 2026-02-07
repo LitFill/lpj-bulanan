@@ -74,21 +74,23 @@ export const dbLogger = {
    * @param {string} message - Pesan log yang akan disimpan.
    * @param {Object} [meta={}] - Data tambahan dalam format objek.
    */
-  log: (level, message, meta = {}) => {
-    const logData = {
-      level,
-      message,
-      meta: JSON.stringify(meta),
-      timestamp: new Date().toISOString(),
-    };
+  log: async (level, message, meta = {}) => {
+    try {
+      const dbInstance = await db();
+      const logData = {
+        level,
+        message,
+        meta: JSON.stringify(meta),
+        timestamp: new Date().toISOString(),
+      };
 
-    db.run(
-      "INSERT INTO system_logs (level, message, meta, timestamp) VALUES (?, ?, ?, ?)",
-      [logData.level, logData.message, logData.meta, logData.timestamp],
-      (err) => {
-        if (err) logger.error("Failed to log to database:", err);
-      },
-    );
+      await dbInstance.run(
+        "INSERT INTO system_logs (level, message, meta, timestamp) VALUES (?, ?, ?, ?)",
+        [logData.level, logData.message, logData.meta, logData.timestamp],
+      );
+    } catch (err) {
+      logger.error("Failed to log to database:", err);
+    }
   },
 };
 
@@ -105,30 +107,32 @@ export const auditLogger = {
    * @param {number|string} resourceId - ID sumber daya yang terkait.
    * @param {Object} [details={}] - Detail tambahan mengenai aktivitas.
    */
-  log: (userId, action, resourceType, resourceId, details = {}) => {
-    const auditData = {
-      user_id: userId,
-      action,
-      resource_type: resourceType,
-      resource_id: resourceId,
-      details: JSON.stringify(details),
-      created_at: new Date().toISOString(),
-    };
+  log: async (userId, action, resourceType, resourceId, details = {}) => {
+    try {
+      const dbInstance = await db();
+      const auditData = {
+        user_id: userId,
+        action,
+        resource_type: resourceType,
+        resource_id: resourceId,
+        details: JSON.stringify(details),
+        created_at: new Date().toISOString(),
+      };
 
-    db.run(
-      "INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [
-        auditData.user_id,
-        auditData.action,
-        auditData.resource_type,
-        auditData.resource_id,
-        auditData.details,
-        auditData.created_at,
-      ],
-      (err) => {
-        if (err) logger.error("Failed to log audit:", err);
-      },
-    );
+      await dbInstance.run(
+        "INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          auditData.user_id,
+          auditData.action,
+          auditData.resource_type,
+          auditData.resource_id,
+          auditData.details,
+          auditData.created_at,
+        ],
+      );
+    } catch (err) {
+      logger.error("Failed to log audit:", err);
+    }
 
     // Also log to Winston
     logger.info(`AUDIT: ${action}`, {

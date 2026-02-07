@@ -1,11 +1,22 @@
-import { serialize, prepare } from "./database.js";
+import { getDb } from "./database.js";
 
-serialize(() => {
-  // Insert default user
-  const stmt = prepare(
-    "INSERT OR IGNORE INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)",
-  );
-  stmt.run("admin", "admin123", "Administrator LPJ", "admin");
-  stmt.finalize();
-  console.log("Database initialized with default user: admin/admin123");
-});
+async function initialize() {
+  try {
+    const db = await getDb();
+
+    // Insert default user
+    await db.run(
+      "INSERT OR IGNORE INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)",
+      ["admin", "admin123", "Administrator LPJ", "admin"],
+    );
+
+    console.log(
+      "Database initialized successfully with default user: admin/admin123",
+    );
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+  }
+}
+
+initialize();
+

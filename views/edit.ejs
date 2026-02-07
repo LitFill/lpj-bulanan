@@ -105,24 +105,108 @@
                 <textarea name="program_kerja" rows="4" required placeholder="Detail kegiatan yang telah dilaksanakan..." class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"><%= report.program_kerja %></textarea>
             </div>
 
+            <% 
+                let details = { pemasukan: [], pengeluaran: [] };
+                if (report.financial_details) {
+                    try {
+                        details = JSON.parse(report.financial_details);
+                    } catch (e) {
+                        console.error("Error parsing financial_details", e);
+                    }
+                }
+            %>
+
             <!-- Rincian Pemasukan -->
-            <!-- Note: Simplified for edit, in real app we might need to parse JSON if stored as such, but here we'll assume we can't easily parse without helper. For now let's just use the totals or ask user if they need full detail edit.
-                 Looking at server.js, the details aren't stored in DB as JSON, only totals. 
-                 Wait, if I want to re-generate PDF, I need the details. 
-                 The current DB schema only has 'pemasukan' and 'pengeluaran' as totals. 
-                 It seems the details are ONLY in the PDF. That's a limitation.
-            -->
-            <p class="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">Note: Rincian item saat ini hanya bisa diperbarui totalnya karena data item tidak disimpan di database.</p>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <label class="block text-sm font-semibold text-blue-800">Rincian Pemasukan</label>
+                    <button type="button" onclick="addRow('pemasukan-list')" class="text-xs bg-blue-100 text-blue-600 px-3 py-1 rounded-full hover:bg-blue-200 transition">+ Tambah Baris</button>
+                </div>
+                <div id="pemasukan-list" class="space-y-3 md:space-y-2">
+                    <% if (details.pemasukan && details.pemasukan.length > 0) { %>
+                        <% details.pemasukan.forEach((item, i) => { %>
+                            <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                                <input type="text" name="pemasukan_ket[]" value="<%= item.ket %>" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                                <div class="col-span-4 flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                    <input type="number" name="pemasukan_val[]" value="<%= item.val %>" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                                </div>
+                                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                            <input type="text" name="pemasukan_ket[]" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                            <div class="col-span-4 flex items-center gap-2">
+                                <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                <input type="number" name="pemasukan_val[]" value="0" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Rincian Pengeluaran -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <label class="block text-sm font-semibold text-red-800">Rincian Pengeluaran</label>
+                    <button type="button" onclick="addRow('pengeluaran-list')" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-full hover:bg-red-200 transition">+ Tambah Baris</button>
+                </div>
+                <div id="pengeluaran-list" class="space-y-3 md:space-y-2">
+                    <% if (details.pengeluaran && details.pengeluaran.length > 0) { %>
+                        <% details.pengeluaran.forEach((item, i) => { %>
+                            <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                                <input type="text" name="pengeluaran_ket[]" value="<%= item.ket %>" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                                <div class="col-span-4 flex items-center gap-2">
+                                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                    <input type="number" name="pengeluaran_val[]" value="<%= item.val %>" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                                </div>
+                                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                                </button>
+                            </div>
+                        <% }); %>
+                    <% } else { %>
+                        <div class="flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative">
+                            <input type="text" name="pengeluaran_ket[]" placeholder="Keterangan" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                            <div class="col-span-4 flex items-center gap-2">
+                                <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                                <input type="number" name="pengeluaran_val[]" value="0" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-500">
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Total Pemasukan (Rp)</label>
-                    <input type="number" name="pemasukan" value="<%= report.pemasukan %>" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Total Pemasukan</label>
+                    <input type="number" id="total-pemasukan" name="pemasukan" value="<%= report.pemasukan %>" readonly class="w-full bg-transparent font-bold text-blue-600 outline-none">
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-gray-700 mb-2">Total Pengeluaran (Rp)</label>
-                    <input type="number" name="pengeluaran" value="<%= report.pengeluaran %>" required class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Total Pengeluaran</label>
+                    <input type="number" id="total-pengeluaran" name="pengeluaran" value="<%= report.pengeluaran %>" readonly class="w-full bg-transparent font-bold text-red-600 outline-none">
                 </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase">Saldo Akhir</label>
+                    <input type="number" id="total-saldo" value="<%= Number(report.pemasukan) - Number(report.pengeluaran) %>" readonly class="w-full bg-transparent font-bold text-green-600 outline-none">
+                </div>
+            </div>
+
+            <!-- Negative Balance Warning -->
+            <div id="saldo-warning" class="<%= (Number(report.pengeluaran) > Number(report.pemasukan)) ? '' : 'hidden' %> bg-red-50 border-l-4 border-red-500 p-3">
+                <p class="text-xs text-red-700 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    Peringatan: Total pengeluaran lebih besar dari pemasukan. Pastikan angka sudah benar.
+                </p>
             </div>
 
             <div>
@@ -148,6 +232,11 @@
     <script>
         // Form Loading State
         document.querySelector('form').addEventListener('submit', function(e) {
+            if (!confirm('Apakah Anda yakin ingin memperbarui laporan ini? PDF lama akan diganti dengan yang baru.')) {
+                e.preventDefault();
+                return;
+            }
+
             const btn = document.getElementById('submit-btn');
             const text = document.getElementById('btn-text');
             const spinner = document.getElementById('btn-spinner');
@@ -156,6 +245,68 @@
             btn.classList.add('opacity-70', 'cursor-not-allowed');
             text.innerText = 'Sedang Memperbarui...';
             spinner.classList.remove('hidden');
+        });
+
+        function addRow(containerId) {
+            const container = document.getElementById(containerId);
+            const isPemasukan = containerId === 'pemasukan-list';
+            const focusColor = isPemasukan ? 'blue' : 'red';
+            const div = document.createElement('div');
+            div.className = 'flex flex-col md:grid md:grid-cols-12 gap-2 item-row p-3 md:p-0 bg-gray-50 md:bg-transparent rounded-lg md:rounded-none relative';
+            div.innerHTML = `
+                <input type="text" name="${isPemasukan ? 'pemasukan_ket[]' : 'pengeluaran_ket[]'}" placeholder="Keterangan" oninput="handleAutoRow(this, '${containerId}')" class="col-span-7 px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-${focusColor}-500">
+                <div class="col-span-4 flex items-center gap-2">
+                    <span class="text-xs font-bold text-gray-400 md:hidden">Rp</span>
+                    <input type="number" name="${isPemasukan ? 'pemasukan_val[]' : 'pengeluaran_val[]'}" value="0" oninput="handleAutoRow(this, '${containerId}'); calculateTotals()" class="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:ring-1 focus:ring-${focusColor}-500">
+                </div>
+                <button type="button" onclick="this.parentElement.remove(); calculateTotals()" class="absolute top-2 right-2 md:static md:col-span-1 text-red-400 hover:text-red-600 p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function handleAutoRow(input, containerId) {
+            const container = document.getElementById(containerId);
+            const rows = container.querySelectorAll('.item-row');
+            const lastRow = rows[rows.length - 1];
+
+            if (input.parentElement.parentElement === lastRow && input.value.trim() !== "" && input.value !== "0") {
+                addRow(containerId);
+            }
+        }
+
+        function calculateTotals() {
+            let totalMasuk = 0;
+            let totalKeluar = 0;
+
+            document.querySelectorAll('input[name="pemasukan_val[]"]').forEach(input => {
+                totalMasuk += Number(input.value || 0);
+            });
+
+            document.querySelectorAll('input[name="pengeluaran_val[]"]').forEach(input => {
+                totalKeluar += Number(input.value || 0);
+            });
+
+            document.getElementById('total-pemasukan').value = totalMasuk;
+            document.getElementById('total-pengeluaran').value = totalKeluar;
+            document.getElementById('total-saldo').value = totalMasuk - totalKeluar;
+
+            const saldoWarning = document.getElementById('saldo-warning');
+            if (totalKeluar > totalMasuk) {
+                saldoWarning.classList.remove('hidden');
+            } else {
+                saldoWarning.classList.add('hidden');
+            }
+        }
+
+        // Initialize auto-row for inputs
+        document.querySelectorAll('.item-row input').forEach(input => {
+            const containerId = input.closest('[id$="-list"]').id;
+            input.addEventListener('input', function() {
+                handleAutoRow(this, containerId);
+                if (this.type === 'number') calculateTotals();
+            });
         });
 
         // Divisi restriction logic

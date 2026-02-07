@@ -3,18 +3,62 @@ const { static: _static } = express;
 import bodyParser from "body-parser";
 const { urlencoded } = bodyParser;
 import session from "express-session";
-import PDFDocument from "pdfkit";
-import { existsSync, mkdirSync, createWriteStream, unlinkSync } from "fs";
+import { existsSync, mkdirSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import json2csv from "json2csv";
 const { Parser } = json2csv;
 import { upload, handleUploadError } from "./middleware/upload.js";
 import { logger, dbLogger, auditLogger } from "./logger.js";
-import { get, all, run } from "./database.js";
+import { getDb } from "./database.js";
+import { generatePDF } from "./services/pdfService.js";
+import "dotenv/config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Inisialisasi DB Instance
+const db = await getDb();
+
+/**
+ * Helper untuk memparsing input bulan ke format YYYY-MM.
+ * Mendukung format ISO (2024-01), "Januari 2024", atau "2024 Januari".
+ */
+const parseBulan = (bulanStr) => {
+  if (!bulanStr) return null;
+  
+  // 1. Cek format ISO YYYY-MM (Standar input type="month")
+  if (/^\d{4}-\d{2}$/.test(bulanStr)) return bulanStr;
+
+  // 2. Mapping bulan Indonesia
+  const monthsIndo = {
+    januari: "01", februari: "02", maret: "03", april: "04", mei: "05", juni: "06",
+    juli: "07", agustus: "08", september: "09", oktober: "10", november: "11", desember: "12"
+  };
+
+  let normalized = bulanStr.toLowerCase();
+  Object.keys(monthsIndo).forEach(name => {
+    normalized = normalized.replace(name, monthsIndo[name]);
+  });
+
+  // 3. Ekstrak Tahun (4 digit) dan Bulan (1-2 digit)
+  const parts = normalized.match(/(\d{4})|(\d{1,2})/g);
+  if (parts) {
+    const year = parts.find(p => p.length === 4);
+    const month = parts.find(p => p.length <= 2 && p !== year);
+    if (year && month) {
+      return `${year}-${month.padStart(2, "0")}`;
+    }
+  }
+
+  // 4. Fallback ke Date.parse (Untuk format Inggris)
+  const d = new Date(bulanStr);
+  if (!isNaN(d.getTime())) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  return null;
+};
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -23,7 +67,7 @@ const port = process.env.PORT || 3000;
 app.use(urlencoded({ extended: true }));
 app.use(
   session({
-    secret: "lpj-secret-key-12345",
+    secret: process.env.SESSION_SECRET || "lpj-secret-key-12345",
     resave: false,
     saveUninitialized: true,
     cookie: { maxAge: 24 * 60 * 60 * 1000 }, // 24 hours
@@ -83,307 +127,120 @@ app.use((req, res, next) => {
   }
 });
 
-/**
- * Fungsi untuk menghasilkan file PDF LPJ.
- * @param {Object} data - Data laporan
- * @param {string} filePath - Path tempat menyimpan file PDF
- * @param {string} finalDivisi - Nama divisi yang sudah diproses
- */
-const generatePDF = (data, filePath, finalDivisi) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const doc = new PDFDocument({ margin: 50 });
-      const stream = createWriteStream(filePath);
-      doc.pipe(stream);
-
-      // Header dengan Logo
-      const logoPath = join(__dirname, "public", "logo.jpg");
-      if (existsSync(logoPath)) doc.image(logoPath, 50, 45, { width: 60 });
-
-      doc
-        .fontSize(16)
-        .font("Helvetica-Bold")
-        .text("PONDOK PESANTREN AT-TAUJIEH AL-ISLAMY 2", { align: "center" });
-      doc
-        .fontSize(10)
-        .font("Helvetica")
-        .text("Leler, Randegan, Kebasen, Banyumas, Jawa Tengah", {
-          align: "center",
-        });
-      doc
-        .fontSize(14)
-        .font("Helvetica-Bold")
-        .moveDown()
-        .text("LAPORAN PERTANGGUNGJAWABAN (LPJ) BULANAN", { align: "center" });
-      doc.moveDown();
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-      doc.moveDown();
-
-      doc.fontSize(12).font("Helvetica");
-      doc
-        .text(`Divisi/Bagian:`, { continued: true })
-        .font("Helvetica-Bold")
-        .text(` ${finalDivisi}`)
-        .font("Helvetica");
-
-      // Format tampilan bulan (YYYY-MM ke Nama Bulan Tahun)
-      const [year, month] = data.bulan.split("-");
-      const dateObj = new Date(year, month - 1);
-      const bulanIndo = dateObj.toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
-      });
-
-      doc.text(`Bulan: ${bulanIndo}`);
-      doc.text(`Pelapor: ${data.nama || data.nama_pelapor}`);
-      doc.moveDown();
-
-      doc
-        .fontSize(13)
-        .fillColor("#1e40af")
-        .font("Helvetica-Bold")
-        .text("1. Realisasi Program Kerja");
-      doc
-        .fontSize(11)
-        .fillColor("black")
-        .font("Helvetica")
-        .text(data.program_kerja);
-      doc.moveDown();
-
-      doc
-        .fontSize(13)
-        .fillColor("#1e40af")
-        .font("Helvetica-Bold")
-        .text("2. Laporan Keuangan");
-
-      doc.fontSize(10).fillColor("black").font("Helvetica");
-
-      // Tabel Pemasukan
-      doc.moveDown(0.5);
-      doc
-        .font("Helvetica-Bold")
-        .text("Rincian Pemasukan:", { underline: true });
-      doc.font("Helvetica");
-
-      if (Array.isArray(data.pemasukan_ket))
-        data.pemasukan_ket.forEach((ket, i) => {
-          const val = Number(data.pemasukan_val[i] || 0);
-          if (ket || val > 0) {
-            const currentY = doc.y;
-            doc.text(`- ${ket || "Tanpa Keterangan"}`);
-            doc.text(`Rp ${val.toLocaleString("id-ID")}`, 450, currentY, {
-              align: "right",
-              width: 100,
-            });
-          }
-        });
-      else doc.text("- Lihat total di bawah -");
-
-      // Tabel Pengeluaran
-      doc.moveDown(0.5);
-      doc
-        .font("Helvetica-Bold")
-        .text("Rincian Pengeluaran:", { underline: true });
-      doc.font("Helvetica");
-
-      if (Array.isArray(data.pengeluaran_ket))
-        data.pengeluaran_ket.forEach((ket, i) => {
-          const val = Number(data.pengeluaran_val[i] || 0);
-          if (ket || val > 0) {
-            const currentY = doc.y;
-            doc.text(`- ${ket || "Tanpa Keterangan"}`);
-            doc.text(`Rp ${val.toLocaleString("id-ID")}`, 450, currentY, {
-              align: "right",
-              width: 100,
-            });
-          }
-        });
-      else doc.text("- Lihat total di bawah -");
-
-      doc.moveDown(0.5);
-      doc.font("Helvetica-Bold").fontSize(11);
-      doc.text(
-        `Total Pemasukan: Rp ${Number(data.pemasukan).toLocaleString("id-ID")}`,
-      );
-      doc.text(
-        `Total Pengeluaran: Rp ${Number(data.pengeluaran).toLocaleString("id-ID")}`,
-      );
-      const saldo = Number(data.pemasukan) - Number(data.pengeluaran);
-      doc
-        .fillColor(saldo >= 0 ? "green" : "red")
-        .text(`Saldo Akhir: Rp ${saldo.toLocaleString("id-ID")}`);
-      doc.fillColor("black").moveDown();
-
-      doc
-        .fontSize(13)
-        .fillColor("#1e40af")
-        .font("Helvetica-Bold")
-        .text("3. Evaluasi & Kendala");
-      doc.fontSize(11).fillColor("black").font("Helvetica").text(data.evaluasi);
-      doc.moveDown();
-
-      doc
-        .fontSize(13)
-        .fillColor("#1e40af")
-        .font("Helvetica-Bold")
-        .text("4. Rencana Bulan Depan");
-      doc.fontSize(11).fillColor("black").font("Helvetica").text(data.rencana);
-      doc.moveDown();
-
-      // Tanda Tangan & Stempel
-      doc.moveDown(2);
-      const currentY = doc.y;
-      doc.fontSize(11).text("Mengetahui,", 400, currentY);
-      doc.text("Kepala Divisi,", 400, currentY + 15);
-
-      const ttdPath = join(__dirname, "public", "ttd.png");
-      const stempelPath = join(__dirname, "public", "stempel.jpg");
-
-      if (existsSync(ttdPath))
-        doc.image(ttdPath, 400, currentY + 35, { width: 80 });
-
-      if (existsSync(stempelPath))
-        doc.image(stempelPath, 370, currentY + 30, { width: 100 });
-
-      doc.text(`( ${data.nama || data.nama_pelapor} )`, 400, currentY + 110);
-
-      // Footer
-      doc.moveDown(4);
-      doc
-        .fontSize(10)
-        .fillColor("grey")
-        .text("Dicetak secara otomatis melalui Sistem LPJ Digital", {
-          align: "center",
-        });
-      doc.text(`Generated: ${new Date().toLocaleString("id-ID")}`, {
-        align: "center",
-      });
-
-      doc.end();
-      stream.on("finish", () => resolve());
-      stream.on("error", (err) => reject(err));
-    } catch (error) {
-      reject(error);
-    }
-  });
-};
-
 // Routes
 app.get("/", (req, res) => {
   logger.info("Rendering index page");
   res.render("index", { user: req.session.user, error: null });
 });
 
-app.get("/dashboard", isAuthenticated, (req, res) => {
-  const statsQuery = `
-        SELECT
-            COUNT(*) as total_reports,
-            SUM(pemasukan) as total_pemasukan,
-            SUM(pengeluaran) as total_pengeluaran,
-            (SUM(pemasukan) - SUM(pengeluaran)) as total_saldo
-        FROM reports
-    `;
+app.get("/dashboard", isAuthenticated, async (req, res) => {
+  try {
+    const statsQuery = `
+          SELECT
+              COUNT(*) as total_reports,
+              SUM(pemasukan) as total_pemasukan,
+              SUM(pengeluaran) as total_pengeluaran,
+              (SUM(pemasukan) - SUM(pengeluaran)) as total_saldo
+          FROM reports
+      `;
 
-  const monthlyQuery = `
-        SELECT bulan, SUM(pemasukan) as masuk, SUM(pengeluaran) as keluar
-        FROM reports
-        GROUP BY bulan
-        ORDER BY bulan DESC
-        LIMIT 6
-    `;
+    const monthlyQuery = `
+          SELECT bulan, SUM(pemasukan) as masuk, SUM(pengeluaran) as keluar
+          FROM reports
+          GROUP BY bulan
+          ORDER BY bulan DESC
+          LIMIT 6
+      `;
 
-  get(statsQuery, (err, stats) => {
-    if (err) return res.status(500).send("Error fetching stats");
-    all(monthlyQuery, (err, monthlyData) => {
-      if (err) return res.status(500).send("Error fetching monthly data");
-      res.render("dashboard", {
-        stats: stats || {},
-        monthlyData: monthlyData || [],
-        user: req.session.user,
-      });
+    const stats = await db.get(statsQuery);
+    const monthlyData = await db.all(monthlyQuery);
+
+    res.render("dashboard", {
+      stats: stats || {},
+      monthlyData: monthlyData || [],
+      user: req.session.user,
     });
-  });
+  } catch (err) {
+    logger.error("Dashboard error:", err);
+    res.status(500).send("Error fetching stats");
+  }
 });
 
-app.get("/export-csv", isAuthenticated, (_req, res) => {
-  all(
-    "SELECT divisi, bulan, nama_pelapor, pemasukan, pengeluaran, created_at FROM reports ORDER BY created_at DESC",
-    (err, rows) => {
-      if (err) return res.status(500).send("Error exporting data");
+app.get("/export-csv", isAuthenticated, async (_req, res) => {
+  try {
+    const rows = await db.all(
+      /* sql */
+      "SELECT divisi, bulan, nama_pelapor, pemasukan, pengeluaran, created_at FROM reports ORDER BY created_at DESC",
+    );
 
-      try {
-        const fields = [
-          "divisi",
-          "bulan",
-          "nama_pelapor",
-          "pemasukan",
-          "pengeluaran",
-          "created_at",
-        ];
-        const json2csvParser = new Parser({ fields });
-        const csv = json2csvParser.parse(rows);
+    const fields = [
+      "divisi",
+      "bulan",
+      "nama_pelapor",
+      "pemasukan",
+      "pengeluaran",
+      "created_at",
+    ];
+    const json2csvParser = new Parser({ fields });
+    const csv = json2csvParser.parse(rows);
 
-        res.header("Content-Type", "text/csv");
-        res.attachment(`Rekap_LPJ_${Date.now()}.csv`);
-        res.send(csv);
-      } catch (error) {
-        logger.error("Export error:", error);
-        res.status(500).send("Error generating CSV");
-      }
-    },
-  );
+    res.header("Content-Type", "text/csv");
+    res.attachment(`Rekap_LPJ_${Date.now()}.csv`);
+    res.send(csv);
+  } catch (err) {
+    logger.error("Export error:", err);
+    res.status(500).send("Error exporting data");
+  }
 });
 
 /**
  * Rute untuk menghapus laporan beserta file fisik terkait (PDF & Lampiran).
  */
-app.post("/delete-report/:id", isAuthenticated, (req, res) => {
+app.post("/delete-report/:id", isAuthenticated, async (req, res) => {
   const reportId = req.params.id;
 
-  get(
-    "SELECT pdf_path, attachment_path, divisi, bulan FROM reports WHERE id = ?",
-    [reportId],
-    (err, report) => {
-      if (err || !report) {
-        logger.error("Error finding report to delete:", err);
-        return res.status(404).send("Laporan tidak ditemukan");
+  try {
+    const report = await db.get(
+      "SELECT pdf_path, attachment_path, divisi, bulan FROM reports WHERE id = ?",
+      [reportId],
+    );
+
+    if (!report) return res.status(404).send("Laporan tidak ditemukan");
+
+    await db.run("DELETE FROM reports WHERE id = ?", [reportId]);
+
+    if (report.pdf_path && existsSync(report.pdf_path))
+      try {
+        unlinkSync(report.pdf_path);
+      } catch (e) {
+        logger.error("File delete error:", e);
       }
 
-      run("DELETE FROM reports WHERE id = ?", [reportId], (err) => {
-        if (err) {
-          logger.error("Error deleting report from DB:", err);
-          return res.status(500).send("Gagal menghapus data");
-        }
+    if (report.attachment_path && existsSync(report.attachment_path))
+      try {
+        unlinkSync(report.attachment_path);
+      } catch (e) {
+        logger.error("Attachment delete error:", e);
+      }
 
-        if (report.pdf_path && existsSync(report.pdf_path))
-          try {
-            unlinkSync(report.pdf_path);
-          } catch (e) {
-            logger.error("File delete error:", e);
-          }
+    await auditLogger.log(req.session.user.id, "DELETE_REPORT", "report", reportId, {
+      divisi: report.divisi,
+      bulan: report.bulan,
+    });
 
-        if (report.attachment_path && existsSync(report.attachment_path))
-          try {
-            unlinkSync(report.attachment_path);
-          } catch (e) {
-            logger.error("Attachment delete error:", e);
-          }
-
-        auditLogger.log(
-          req.session.user.id,
-          "DELETE_REPORT",
-          "report",
-          reportId,
-          {
-            divisi: report.divisi,
-            bulan: report.bulan,
-          },
-        );
-
-        res.redirect("/reports");
-      });
-    },
-  );
+    res.redirect("/reports");
+  } catch (err) {
+    logger.error("Error deleting report:", {
+      message: err.message,
+      stack: err.stack,
+      reportId,
+    });
+          await dbLogger.log("error", "Gagal menghapus laporan", {
+            error: err.message,
+            reportId,
+            userId: req.session.user ? req.session.user.id : "unknown",
+          });    res.status(500).send(`Gagal menghapus data: ${err.message}`);
+  }
 });
 
 app.get("/login", (req, res) => {
@@ -391,25 +248,29 @@ app.get("/login", (req, res) => {
   res.render("login", { error: null });
 });
 
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  get(
-    "SELECT * FROM users WHERE username = ? AND password = ?",
-    [username, password],
-    (err, user) => {
-      if (err || !user)
-        return res.render("login", { error: "Username atau password salah" });
+  try {
+    const user = await db.get(
+      "SELECT * FROM users WHERE username = ? AND password = ?",
+      [username, password],
+    );
 
-      req.session.user = {
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        role: user.role,
-      };
-      logger.info(`User logged in: ${user.username}`);
-      res.redirect("/reports");
-    },
-  );
+    if (!user)
+      return res.render("login", { error: "Username atau password salah" });
+
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role,
+    };
+    logger.info(`User logged in: ${user.username}`);
+    res.redirect("/reports");
+  } catch (err) {
+    logger.error("Login error:", err);
+    res.render("login", { error: "Terjadi kesalahan sistem" });
+  }
 });
 
 app.get("/logout", (req, res) => {
@@ -419,25 +280,26 @@ app.get("/logout", (req, res) => {
   res.redirect("/login");
 });
 
-app.get("/reports", isAuthenticated, (req, res) => {
-  all("SELECT * FROM reports ORDER BY created_at DESC", (err, reports) => {
-    if (err) {
-      logger.error("Error fetching reports:", err);
-      return res.status(500).json({ error: "Internal server error" });
-    }
-
+app.get("/reports", isAuthenticated, async (req, res) => {
+  try {
+    const reports = await db.all(
+      "SELECT * FROM reports ORDER BY created_at DESC",
+    );
     logger.info(
       `Fetched ${reports.length} reports for rendering by user ${req.session.user.username}`,
     );
     res.render("reports", { reports, user: req.session.user });
-  });
+  } catch (err) {
+    logger.error("Error fetching reports:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 app.post(
   "/submit",
   upload.single("attachment"),
   handleUploadError,
-  (req, res) => {
+  async (req, res) => {
     const startTime = Date.now();
     const data = req.body;
     const attachment = req.file;
@@ -450,6 +312,17 @@ app.post(
         user: req.session.user,
         oldData: data,
       });
+
+    // Validasi Bulan
+    const normalizedBulan = parseBulan(data.bulan);
+    if (!normalizedBulan)
+      return res.status(400).render("index", {
+        error: "Format bulan tidak valid! Gunakan format 'Januari 2024' atau gunakan pemilih tanggal.",
+        user: req.session.user,
+        oldData: data,
+      });
+
+    data.bulan = normalizedBulan;
 
     // Validasi Bulan (Tidak boleh bulan masa depan)
     const now = new Date();
@@ -476,100 +349,133 @@ app.post(
     const fileName = `LPJ_${finalDivisi.replace(/\s+/g, "_")}_${data.bulan}_${Date.now()}.pdf`;
     const filePath = join(__dirname, "reports", fileName);
 
-    generatePDF(data, filePath, finalDivisi)
-      .then(() => {
-        // Save to database
-        const reportData = {
-          user_id: userId,
-          divisi: finalDivisi,
-          bulan: data.bulan,
-          nama_pelapor: data.nama,
-          program_kerja: data.program_kerja,
-          pemasukan: Number(data.pemasukan),
-          pengeluaran: Number(data.pengeluaran),
-          evaluasi: data.evaluasi,
-          rencana: data.rencana,
-          attachment_filename: attachment ? attachment.filename : null,
-          attachment_path: attachment ? attachment.path : null,
-          pdf_filename: fileName,
-          pdf_path: filePath,
-          status: "submitted",
-        };
+    try {
+      await generatePDF(data, filePath, finalDivisi);
 
-        run(
-          `INSERT INTO reports (
-                    user_id, divisi, bulan, nama_pelapor, program_kerja,
-                    pemasukan, pengeluaran, evaluasi, rencana,
-                    attachment_filename, attachment_path, pdf_filename, pdf_path, status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            reportData.user_id,
-            reportData.divisi,
-            reportData.bulan,
-            reportData.nama_pelapor,
-            reportData.program_kerja,
-            reportData.pemasukan,
-            reportData.pengeluaran,
-            reportData.evaluasi,
-            reportData.rencana,
-            reportData.attachment_filename,
-            reportData.attachment_path,
-            reportData.pdf_filename,
-            reportData.pdf_path,
-            reportData.status,
-          ],
-          function (err) {
-            if (err) {
-              logger.error("Error saving report to database:", err);
-              return res.status(500).json({ error: "Failed to save report" });
-            }
+      // Collect financial details
+      /** @type {Object.<string, number[]>} */
+      const financialDetails = {
+        pemasukan: [],
+        pengeluaran: [],
+      };
 
-            const reportId = this.lastID;
-            const processingTime = Date.now() - startTime;
+      if (Array.isArray(data.pemasukan_ket))
+        data.pemasukan_ket.forEach((ket, i) => {
+          const val = Number(data.pemasukan_val[i] || 0);
+          if (ket || val > 0) financialDetails.pemasukan.push({ ket, val });
+        });
 
-            // Log audit trail
-            auditLogger.log(
-              reportData.user_id,
-              "CREATE_REPORT",
-              "report",
-              reportId,
-              {
-                divisi: finalDivisi,
-                bulan: data.bulan,
-                processingTime: `${processingTime}ms`,
-                hasAttachment: !!attachment,
-              },
-            );
+      if (Array.isArray(data.pengeluaran_ket))
+        data.pengeluaran_ket.forEach((ket, i) => {
+          const val = Number(data.pengeluaran_val[i] || 0);
+          if (ket || val > 0) financialDetails.pengeluaran.push({ ket, val });
+        });
 
-            logger.info("Report created successfully", {
-              reportId,
-              fileName,
-              processingTime: `${processingTime}ms`,
-            });
+      // Save to database
+      const reportData = {
+        user_id: userId,
+        divisi: finalDivisi,
+        bulan: data.bulan,
+        nama_pelapor: data.nama,
+        program_kerja: data.program_kerja,
+        pemasukan: Number(data.pemasukan),
+        pengeluaran: Number(data.pengeluaran),
+        evaluasi: data.evaluasi,
+        rencana: data.rencana,
+        attachment_filename: attachment ? attachment.filename : null,
+        attachment_path: attachment ? attachment.path : null,
+        pdf_filename: fileName,
+        pdf_path: filePath,
+        financial_details: JSON.stringify(financialDetails),
+        status: "submitted",
+      };
 
-            res.render("success", { fileName, user: req.session.user });
-          },
-        );
-      })
-      .catch((err) => {
-        logger.error("PDF Generation error:", err);
-        res.status(500).send("Error generating PDF");
+      const result = await db.run(
+        `INSERT INTO reports (
+                  user_id, divisi, bulan, nama_pelapor, program_kerja,
+                  pemasukan, pengeluaran, evaluasi, rencana,
+                  attachment_filename, attachment_path, pdf_filename, pdf_path,
+                  financial_details, status
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          reportData.user_id,
+          reportData.divisi,
+          reportData.bulan,
+          reportData.nama_pelapor,
+          reportData.program_kerja,
+          reportData.pemasukan,
+          reportData.pengeluaran,
+          reportData.evaluasi,
+          reportData.rencana,
+          reportData.attachment_filename,
+          reportData.attachment_path,
+          reportData.pdf_filename,
+          reportData.pdf_path,
+          reportData.financial_details,
+          reportData.status,
+        ],
+      );
+
+      const reportId = result.lastID;
+      const processingTime = Date.now() - startTime;
+
+      // Log audit trail
+      await auditLogger.log(reportData.user_id, "CREATE_REPORT", "report", reportId, {
+        divisi: finalDivisi,
+        bulan: data.bulan,
+        processingTime: `${processingTime}ms`,
+        hasAttachment: !!attachment,
       });
+
+      logger.info("Report created successfully", {
+        reportId,
+        fileName,
+        processingTime: `${processingTime}ms`,
+      });
+
+      res.render("success", { fileName, user: req.session.user });
+    } catch (err) {
+      logger.error("Error processing submission:", {
+        message: err.message,
+        stack: err.stack,
+        userId,
+        data: req.body,
+      });
+
+      await dbLogger.log("error", "Gagal menyimpan laporan baru", {
+        error: err.message,
+        userId,
+      });
+
+      res.status(500).send(`Gagal memproses laporan: ${err.message}`);
+    }
   },
 );
 
 /**
  * Rute untuk menampilkan halaman edit laporan.
  */
-app.get("/edit-report/:id", isAuthenticated, (req, res) => {
+app.get("/edit-report/:id", isAuthenticated, async (req, res) => {
   const reportId = req.params.id;
-  get("SELECT * FROM reports WHERE id = ?", [reportId], (err, report) => {
-    if (err || !report) {
-      logger.error("Error finding report for edit:", err);
-      return res.status(404).send("Laporan tidak ditemukan");
-    }
+  try {
+    const report = await db.get("SELECT * FROM reports WHERE id = ?", [
+      reportId,
+    ]);
+    if (!report) return res.status(404).send("Laporan tidak ditemukan");
+
     res.render("edit", { report, user: req.session.user, error: null });
-  });
+  } catch (err) {
+    logger.error("Error finding report for edit:", {
+      message: err.message,
+      stack: err.stack,
+      reportId,
+    });
+    await dbLogger.log("error", "Gagal memuat halaman edit laporan", {
+      error: err.message,
+      reportId,
+    });
+    res.status(500).send(`Terjadi kesalahan sistem: ${err.message}`);
+  }
 });
 
 /**
@@ -580,97 +486,149 @@ app.post(
   isAuthenticated,
   upload.single("attachment"),
   handleUploadError,
-  (req, res) => {
+  async (req, res) => {
     const reportId = req.params.id;
     const data = req.body;
     const attachment = req.file;
 
-    get("SELECT * FROM reports WHERE id = ?", [reportId], (err, oldReport) => {
-      if (err || !oldReport)
-        return res.status(404).send("Laporan tidak ditemukan");
+    try {
+      const oldReport = await db.get("SELECT * FROM reports WHERE id = ?", [
+        reportId,
+      ]);
+
+      if (!oldReport) return res.status(404).send("Laporan tidak ditemukan");
 
       let finalDivisi = data.divisi;
       if (finalDivisi === "Ko'or Asrama" && data.nama_asrama)
         finalDivisi = data.nama_asrama;
 
-      // Hapus PDF lama
-      if (existsSync(oldReport.pdf_path))
+      // Validasi Bulan
+      const normalizedBulan = parseBulan(data.bulan);
+      if (!normalizedBulan)
+        return res.status(400).render("edit", {
+          report: { ...oldReport, ...data },
+          user: req.session.user,
+          error: "Format bulan tidak valid!",
+        });
+
+      data.bulan = normalizedBulan;
+
+      // Validasi Bulan (Tidak boleh bulan masa depan)
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      if (data.bulan > currentMonth)
+        return res.status(400).render("edit", {
+          report: { ...oldReport, ...data },
+          user: req.session.user,
+          error: "Bulan laporan tidak boleh di masa depan!",
+        });
+
+      // Generate PDF baru
+      const fileName = `LPJ_${finalDivisi.replace(/\s+/g, "_")}_${data.bulan}_${Date.now()}.pdf`;
+      const filePath = join(__dirname, "reports", fileName);
+
+      await generatePDF(data, filePath, finalDivisi);
+
+      // Hapus PDF lama setelah PDF baru berhasil di-generate
+      if (oldReport.pdf_path && existsSync(oldReport.pdf_path))
         try {
           unlinkSync(oldReport.pdf_path);
         } catch (e) {
           logger.error("Old PDF delete error:", e);
         }
 
-      // Generate PDF baru
-      const fileName = `LPJ_${finalDivisi.replace(/\s+/g, "_")}_${data.bulan}_${Date.now()}.pdf`;
-      const filePath = join(__dirname, "reports", fileName);
+      let attachment_filename = oldReport.attachment_filename;
+      let attachment_path = oldReport.attachment_path;
+      let oldAttachmentPathToDelete = null;
 
-      generatePDF(data, filePath, finalDivisi)
-        .then(() => {
-          let attachment_filename = oldReport.attachment_filename;
-          let attachment_path = oldReport.attachment_path;
+      if (attachment) {
+        // Simpan path lampiran lama untuk dihapus nanti
+        if (oldReport.attachment_path && existsSync(oldReport.attachment_path))
+          oldAttachmentPathToDelete = oldReport.attachment_path;
 
-          if (attachment) {
-            // Hapus lampiran lama jika ada yang baru
-            if (
-              oldReport.attachment_path &&
-              existsSync(oldReport.attachment_path)
-            )
-              try {
-                unlinkSync(oldReport.attachment_path);
-              } catch (e) {
-                logger.error("Old attachment delete error:", e);
-              }
+        attachment_filename = attachment.filename;
+        attachment_path = attachment.path;
+      }
 
-            attachment_filename = attachment.filename;
-            attachment_path = attachment.path;
-          }
+      // Collect financial details
+      const financialDetails = {
+        pemasukan: [],
+        pengeluaran: [],
+      };
 
-          run(
-            `UPDATE reports SET
-                            divisi = ?, bulan = ?, nama_pelapor = ?, program_kerja = ?,
-                            pemasukan = ?, pengeluaran = ?, evaluasi = ?, rencana = ?,
-                            attachment_filename = ?, attachment_path = ?,
-                            pdf_filename = ?, pdf_path = ?
-                        WHERE id = ?`,
-            [
-              finalDivisi,
-              data.bulan,
-              data.nama,
-              data.program_kerja,
-              Number(data.pemasukan),
-              Number(data.pengeluaran),
-              data.evaluasi,
-              data.rencana,
-              attachment_filename,
-              attachment_path,
-              fileName,
-              filePath,
-              reportId,
-            ],
-            (err) => {
-              if (err) {
-                logger.error("Update DB error:", err);
-                return res.status(500).send("Gagal memperbarui database");
-              }
-
-              auditLogger.log(
-                req.session.user.id,
-                "UPDATE_REPORT",
-                "report",
-                reportId,
-                { divisi: finalDivisi, bulan: data.bulan },
-              );
-
-              res.redirect("/reports");
-            },
-          );
-        })
-        .catch((err) => {
-          logger.error("PDF Regeneration error:", err);
-          res.status(500).send("Gagal regenerasi PDF");
+      if (Array.isArray(data.pemasukan_ket))
+        data.pemasukan_ket.forEach((ket, i) => {
+          const val = Number(data.pemasukan_val[i] || 0);
+          if (ket || val > 0) financialDetails.pemasukan.push({ ket, val });
         });
-    });
+
+      if (Array.isArray(data.pengeluaran_ket))
+        data.pengeluaran_ket.forEach((ket, i) => {
+          const val = Number(data.pengeluaran_val[i] || 0);
+          if (ket || val > 0) financialDetails.pengeluaran.push({ ket, val });
+        });
+
+      await db.run(
+        `UPDATE reports SET
+                        divisi = ?, bulan = ?, nama_pelapor = ?, program_kerja = ?,
+                        pemasukan = ?, pengeluaran = ?, evaluasi = ?, rencana = ?,
+                        attachment_filename = ?, attachment_path = ?,
+                        pdf_filename = ?, pdf_path = ?, financial_details = ?
+                    WHERE id = ?`,
+        [
+          finalDivisi,
+          data.bulan,
+          data.nama,
+          data.program_kerja,
+          Number(data.pemasukan),
+          Number(data.pengeluaran),
+          data.evaluasi,
+          data.rencana,
+          attachment_filename,
+          attachment_path,
+          fileName,
+          filePath,
+          JSON.stringify(financialDetails),
+          reportId,
+        ],
+      );
+
+      // Hapus lampiran lama hanya jika update DB berhasil
+      if (oldAttachmentPathToDelete)
+        try {
+          unlinkSync(oldAttachmentPathToDelete);
+        } catch (e) {
+          logger.error("Old attachment delete error:", e);
+        }
+
+      await auditLogger.log(
+        req.session.user.id,
+        "UPDATE_REPORT",
+        "report",
+        reportId,
+        {
+          divisi: finalDivisi,
+          bulan: data.bulan,
+        },
+      );
+
+      res.redirect("/reports");
+    } catch (err) {
+      logger.error("Update error:", {
+        message: err.message,
+        stack: err.stack,
+        reportId,
+        data: req.body,
+      });
+
+      await dbLogger.log("error", "Gagal memperbarui laporan", {
+        error: err.message,
+        reportId,
+        userId: req.session.user ? req.session.user.id : "unknown",
+      });
+
+      res.status(500).send(`Gagal memperbarui laporan: ${err.message}`);
+    }
   },
 );
 

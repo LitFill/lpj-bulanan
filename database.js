@@ -1,41 +1,34 @@
 import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const sqlite3Verbose = sqlite3.verbose();
-
-/**
- * Path ke file database SQLite
- * @type {string}
- */
 const dbPath = join(__dirname, "database.sqlite");
 
 /**
- * Instansi database SQLite untuk aplikasi LPJ
- * @type {import('sqlite3').Database}
+ * Membuka koneksi database SQLite secara asynchronous.
  */
-const db = new sqlite3Verbose.Database(dbPath, (err) => {
-  if (err) console.error("Error opening database:", err.message);
-  else console.log("Connected to SQLite database.");
-});
+export const openDb = async () =>
+  open({ filename: dbPath, driver: sqlite3.Database });
 
-// Create tables
-db.serialize(() => {
-  // Users table
-  db.run(`CREATE TABLE IF NOT EXISTS users (
+// Inisialisasi Database (Hanya dijalankan saat aplikasi pertama kali butuh koneksi)
+export const initDb = async () => {
+  const db = await openDb();
+
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         full_name TEXT NOT NULL,
         role TEXT DEFAULT 'user',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
+    );
 
-  // Reports table
-  db.run(`CREATE TABLE IF NOT EXISTS reports (
+    CREATE TABLE IF NOT EXISTS reports (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         divisi TEXT NOT NULL,
@@ -50,13 +43,13 @@ db.serialize(() => {
         attachment_path TEXT,
         pdf_filename TEXT,
         pdf_path TEXT,
+        financial_details TEXT,
         status TEXT DEFAULT 'submitted',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
-    )`);
+    );
 
-  // Audit logs table
-  db.run(`CREATE TABLE IF NOT EXISTS audit_logs (
+    CREATE TABLE IF NOT EXISTS audit_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         action TEXT NOT NULL,
@@ -67,23 +60,29 @@ db.serialize(() => {
         details TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
-    )`);
+    );
 
-  // System logs table
-  db.run(`CREATE TABLE IF NOT EXISTS system_logs (
+    CREATE TABLE IF NOT EXISTS system_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         level TEXT NOT NULL,
         message TEXT NOT NULL,
         meta TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    )`);
-});
+    );
+  `);
 
-export const get = db.get.bind(db);
-export const all = db.all.bind(db);
-export const run = db.run.bind(db);
-export const serialize = db.serialize.bind(db);
-export const prepare = db.prepare.bind(db);
+  return db;
+};
 
-export default db;
+// Instance DB global yang akan diisi setelah inisialisasi
+let dbInstance = null;
+
+/** @type {Database<sqlite3.Database, sqlite3.Statement>} */
+export const getDb = async () => {
+  if (!dbInstance) dbInstance = await initDb();
+
+  return dbInstance;
+};
+
+export default getDb;
 

@@ -225,6 +225,11 @@
     <script>
         // Form Loading State
         document.querySelector('form').addEventListener('submit', function(e) {
+            if (!confirm('Apakah Anda yakin data yang diisi sudah benar? Laporan akan segera dikirim dan PDF akan dibuat.')) {
+                e.preventDefault();
+                return;
+            }
+
             const btn = document.getElementById('submit-btn');
             const text = document.getElementById('btn-text');
             const spinner = document.getElementById('btn-spinner');
